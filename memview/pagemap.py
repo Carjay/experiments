@@ -57,7 +57,8 @@ class PageInfo:
                 s+= " swapped type:%d offset:%d" % (self.swaptype, self.swapoffset)
         else:
             s+= " not present"
-            
+
+        s += ">"            
         return s
     
     
