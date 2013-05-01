@@ -68,7 +68,7 @@ def main():
         if me.name != "[heap]":
             continue
 
-        print "mapping '%s':" % me.name
+        print "mapping %x-%x '%s' %s:" % (me.startaddress, me.stopaddress, me.name, getHumanReadableSize(me.size))
         
         # hm, how does this relate to mmupagesize...
         pagesize = me.kernelpagesize
@@ -81,17 +81,23 @@ def main():
         pm = pagemap.PageMap(pid)
         
         pageinfolist = pm.getPageInfo(me.startaddress, me.stopaddress, pagesize)
+        totalcnt = len(pageinfolist)
+
+        drawmap = [] # '.' = not mapped 'x' = active 's' = swapped
 
         for pi in pageinfolist:
-            totalcnt += 1
             if pi.present:
                 presentcnt += 1
                 if pi.swapped:
                     swapcnt += 1
-                
+                    drawmap.append('s')
+                else:
+                    drawmap.append('x')
+            else:
+                drawmap.append('.')
+               
             
-            #print "present:%s swapped:%s pfn:%s swaptype:%s swapoffset:%s pgshift:%s reserved:%s" % (pi.present, pi.swapped, pi.pfn, pi.swaptype, pi.swapoffset, pi.pgshift, pi.reserved)
-            totalcnt  += 1
+        #print "present:%s swapped:%s pfn:%s swaptype:%s swapoffset:%s pgshift:%s reserved:%s" % (pi.present, pi.swapped, pi.pfn, pi.swaptype, pi.swapoffset, pi.pgshift, pi.reserved)
             
         totalsize     = totalcnt * pagesize
         presentsize   = presentcnt * pagesize
@@ -103,6 +109,21 @@ def main():
                                                                                         totalcnt - presentcnt, getHumanReadableSize(notmappedsize),
                                                                                         swapcnt, getHumanReadableSize(swapsize)
                                                                                         ))
+        # draw map
+        width = 80
+        pg    = len(drawmap) / width
+        pgrem = len(drawmap) % width
+        
+        for idx in range(pg):
+            mapstr = ''.join(drawmap[idx*width:(idx+1)*width])
+            print("0x%08x: %s" % (me.startaddress + (idx*width*pagesize), mapstr))
+        
+        if pgrem > 0:
+            mapstr = ''.join(drawmap[pg*width:])
+            print("0x%08x: %s" % (me.startaddress + (pg*width*pagesize), mapstr))
+        
+        #for pi in pageinfolist:
+        #    print pi
 
 
 
