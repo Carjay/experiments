@@ -20,14 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import errno
 import logging
 import struct
 
 lh = logging.getLogger(__name__)
-info  = lh.info
-debug = lh.debug
-error = lh.error
-warn  = lh.warning
+info    = lh.info
+debug   = lh.debug
+error   = lh.error
+warning = lh.warning
 
 
 class PageInfo:
@@ -43,6 +44,35 @@ class PageInfo:
     swapoffset  = None
     pgshift     = None
     reserved    = None
+
+    # extra info that requires root permissions
+    mapcount    = None
+    pageflags   = None
+
+    # pageflag bits
+    KPF_LOCKED        = 0
+    KPF_ERROR         = 1
+    KPF_REFERENCED    = 2
+    KPF_UPTODATE      = 3
+    KPF_DIRTY         = 4
+    KPF_LRU           = 5
+    KPF_ACTIVE        = 6
+    KPF_SLAB          = 7
+    KPF_WRITEBACK     = 8
+    KPF_RECLAIM       = 9
+    KPF_BUDDY         = 10
+    KPF_MMAP          = 11
+    KPF_ANON          = 12
+    KPF_SWAPCACHE     = 13
+    KPF_SWAPBACKED    = 14
+    KPF_COMPOUND_HEAD = 15
+    KPF_COMPOUND_TAIL = 16
+    KPF_HUGE          = 17
+    KPF_UNEVICTABLE   = 18
+    KPF_HWPOISON      = 19
+    KPF_NOPAGE        = 20
+    KPF_KSM           = 21
+    KPF_THP           = 22
     
     def __repr__(self):
         '''
@@ -56,7 +86,13 @@ class PageInfo:
             else:
                 s+= " swapped type:%d offset:%d" % (self.swaptype, self.swapoffset)
         else:
-            s+= " not present"
+            s += " not present"
+
+        if self.mapcount:
+            s += " mapcount:%d" % self.mapcount
+
+        if self.pageflags:
+            s += " %s" % self.getFlagString()
 
         s += ">"            
         return s
@@ -102,6 +138,60 @@ class PageInfo:
             self.pgshift        = (val & 0x1f80000000000000) >> 55
             self.reserved       = (val & 0x2000000000000000) >> 61
     
+      
+    def getFlagString(self):
+        '''
+            return human readable string for flags
+        '''
+        flags = []
+        if self.pageflags & (1 << self.KPF_LOCKED):
+            flags.append("LOCKED")
+        if self.pageflags & (1 << self.KPF_ERROR):
+            flags.append("ERROR")            
+        if self.pageflags & (1 << self.KPF_REFERENCED):
+            flags.append("REFERENCED")            
+        if self.pageflags & (1 << self.KPF_UPTODATE):
+            flags.append("UPTODATE")            
+        if self.pageflags & (1 << self.KPF_DIRTY):
+            flags.append("DIRTY")            
+        if self.pageflags & (1 << self.KPF_LRU):
+            flags.append("LRU")            
+        if self.pageflags & (1 << self.KPF_ACTIVE):
+            flags.append("ACTIVE")            
+        if self.pageflags & (1 << self.KPF_SLAB):
+            flags.append("SLAB")            
+        if self.pageflags & (1 << self.KPF_WRITEBACK):
+            flags.append("WRITEBACK")            
+        if self.pageflags & (1 << self.KPF_RECLAIM):
+            flags.append("RECLAIM")            
+        if self.pageflags & (1 << self.KPF_BUDDY):
+            flags.append("BUDDY")            
+        if self.pageflags & (1 << self.KPF_MMAP):
+            flags.append("MMAP")            
+        if self.pageflags & (1 << self.KPF_ANON):
+            flags.append("ANON")            
+        if self.pageflags & (1 << self.KPF_SWAPCACHE):
+            flags.append("SWAPCACHE")            
+        if self.pageflags & (1 << self.KPF_SWAPBACKED):
+            flags.append("SWAPBACKED")            
+        if self.pageflags & (1 << self.KPF_COMPOUND_HEAD):
+            flags.append("COMPOUND_HEAD")            
+        if self.pageflags & (1 << self.KPF_COMPOUND_TAIL):
+            flags.append("COMPOUND_TAIL")            
+        if self.pageflags & (1 << self.KPF_HUGE):
+            flags.append("HUGE")            
+        if self.pageflags & (1 << self.KPF_UNEVICTABLE):
+            flags.append("UNEVICTABLE")            
+        if self.pageflags & (1 << self.KPF_HWPOISON):
+            flags.append("HWPOISON")            
+        if self.pageflags & (1 << self.KPF_NOPAGE):
+            flags.append("NOPAGE")            
+        if self.pageflags & (1 << self.KPF_KSM):
+            flags.append("KSM")            
+        if self.pageflags & (1 << self.KPF_THP):
+            flags.append("THP")
+        return ','.join(flags)
+
     
 
 class PageMap:
@@ -134,7 +224,18 @@ class PageMap:
         mapsize  = stopaddress - startaddress
         startpfn = startaddress / pagesize
         stoppfn  = stopaddress / pagesize
-        
+
+        fhpgcnt   = None
+        fhpgflags = None
+
+        # get access to both count and flags files if possible
+        try:
+            fhpgcnt   = open("/proc/kpagecount", 'rb')
+            fhpgflags = open("/proc/kpageflags", 'rb')
+        except IOError, exc:
+            if exc.errno == errno.EACCES:
+                warning("getPageInfo: no permission to get extra page info from kernel, start with elevated privileges if you want that type of info")
+       
         startoffset = startpfn * 8 # size of each entry
         try:
             with open(self._pagemapfile, 'rb') as fh:
@@ -151,6 +252,25 @@ class PageMap:
                     for idx, val in enumerate(pagemapvals):
                         vaddr = startaddress + (idx * pagesize)
                         pi = PageInfo(vaddr, val)
+                        
+                        if pi.pfn != None:
+                            if fhpgcnt:
+                                fhpgcnt.seek(pi.pfn * 8)
+                                pgcnt = fhpgcnt.read(8)
+                                if len(pgcnt):
+                                    pgcnt, = struct.unpack('=Q', pgcnt)
+                                    pi.mapcount = pgcnt
+                                else:
+                                    warning("unable to read mapcount for PFN %d" % pi.pfn)
+                            if fhpgflags:
+                                fhpgflags.seek(pi.pfn * 8)
+                                pgflags = fhpgflags.read(8)
+                                if len(pgflags):
+                                    pgflags, = struct.unpack('=Q', pgflags)
+                                    pi.pageflags = pgflags
+                                else:
+                                    warning("unable to read pageflags for PFN %d" % pi.pfn)
+                        
                         ret.append(pi)
                 
         except BaseException, exc:

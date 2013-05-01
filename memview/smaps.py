@@ -28,10 +28,10 @@ import sys
 import logging
 
 lh = logging.getLogger(__name__)
-info  = lh.info
-debug = lh.debug
-error = lh.error
-warn  = lh.warning
+info    = lh.info
+debug   = lh.debug
+error   = lh.error
+warning = lh.warning
 
 
 class MapEntry:
@@ -146,7 +146,7 @@ class MapEntry:
         elif prop == 'Locked':
             self.locked = bytecount
         else:
-            warn("MapEntry.setField: unknown property '%s', ignored" % prop)
+            warning("MapEntry.setField: unknown property '%s', ignored" % prop)
 
 
 
