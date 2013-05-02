@@ -70,18 +70,8 @@ class MapEntry:
         '''
             dumps all information
         '''
-        accesslist = []
-        if self.access & self.VM_READ:
-            accesslist.append("VM_READ")
-        if self.access & self.VM_WRITE:
-            accesslist.append("VM_WRITE")
-        if self.access & self.VM_EXEC:
-            accesslist.append("VM_EXEC")
-        if self.access & self.VM_MAYSHARE:
-            accesslist.append("VM_MAYSHARE")
-        
         s = "<MapEntry start:%08x stop:%08x access:%s offset:%d dev:%d:%d inode:%d name:'%s'" % (
-                self.startaddress, self.stopaddress, ','.join(accesslist),
+                self.startaddress, self.stopaddress, ','.join(self.getAccessString()),
                 self.offset, self.devicemajor, self.deviceminor, self.inode, self.name)
         
         s += " size:%d rss:%d pss:%d shared_clean:%d shared_dirty:%d private_clean:%d private_dirty:%d referenced:%d" % (
@@ -148,6 +138,19 @@ class MapEntry:
         else:
             warning("MapEntry.setField: unknown property '%s', ignored" % prop)
 
+
+    def getAccessString(self):
+        accesslist = []
+        if self.access & self.VM_READ:
+            accesslist.append("VM_READ")
+        if self.access & self.VM_WRITE:
+            accesslist.append("VM_WRITE")
+        if self.access & self.VM_EXEC:
+            accesslist.append("VM_EXEC")
+        if self.access & self.VM_MAYSHARE:
+            accesslist.append("VM_MAYSHARE")
+        return ','.join(accesslist)
+        
 
 
 class SMaps:
